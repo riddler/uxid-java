@@ -101,12 +101,12 @@ package.
 
 Maven Central's publisher, the Central Portal, offers no tokenless (OIDC)
 publishing and requires a GPG signature on every file it accepts, so this
-repository is the one uxid port whose release workflow reads secrets: its
-publish job, and no other job or workflow, reads four repository secrets the
-operator sets, named `MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_PASSWORD`,
-`MAVEN_GPG_PRIVATE_KEY` and `MAVEN_GPG_PASSPHRASE` (ruled by the operator,
-2026-10-21). An agent or a session names them only by name, only in that
-publish job; it never lists, reads, prints, sets or holds a value, never runs
+repository is the one uxid port that cannot publish tokenlessly: its publish
+job, and no other job or workflow, reads stored credentials the operator
+sets, as four repository secrets named `MAVEN_CENTRAL_USERNAME`,
+`MAVEN_CENTRAL_PASSWORD`, `MAVEN_GPG_PRIVATE_KEY` and `MAVEN_GPG_PASSPHRASE`
+(ruled by the operator, 2026-10-21). An agent or a session names them in
+workflow code only by name, only in that publish job; it never lists, reads, prints, sets or holds a value, never runs
 `gh secret` against this repository, and never adds a step that could print
 one. A workflow log that shows a secret value is a stop for the operator. The
 first publish has prerequisites that are the operator's own steps in consoles
@@ -224,7 +224,11 @@ running the tests on each supported JDK; the gate JDK alone does not.
   `@RepeatedTest`, `@TestFactory`) under `src/test/java/` and reads a note
   only on that annotation's own line; it does not read a `//` comment line
   above it. So a test's note is a trailing comment on its annotation line:
-  `@Test // (sabotage: <the mutation> -> <how the test failed>)`.
+  `@Test // (sabotage: <the mutation> -> <how the test failed>)`. The
+  annotation line, note and indentation included, stays within
+  google-java-format's 100 columns: the formatter re-wraps a longer `//`
+  comment, which would move the note's closing parenthesis off the line the
+  scan reads.
 - Documentation may point at the gate; it never enlarges it.
 
 ## Conventions
