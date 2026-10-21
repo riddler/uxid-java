@@ -7,12 +7,15 @@ import java.util.Objects;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * A monotonic generator: for one prefix and random width, the time and random value of each id it
- * makes are greater than the last one's, also when several fall in one millisecond and when the
- * clock moves back, so among ids of one letter case, delimiter and time form each sorts after the
- * last as a string. It follows the "Monotonic generation" rule of the wire format. A monotonic id
- * is an ordinary time-based id of its size and length: nothing in it says how it was made, and
- * {@link Uxid#decode(String)} reads it as any other.
+ * A monotonic generator: for one prefix and random width, the pair of time and random value of each
+ * id it makes is greater than the last one's (the time is at least the last time, and when it is
+ * equal the random value is greater), also when several fall in one millisecond and when the clock
+ * moves back, so among ids of one letter case, delimiter and time form each sorts after the last as
+ * a string. The random value alone is not monotonic: when the clock reaches a later millisecond, or
+ * the field overflows into the next one, the id carries a fresh seed, which can be smaller than the
+ * last value. It follows the "Monotonic generation" rule of the wire format. A monotonic id is an
+ * ordinary time-based id of its size and length: nothing in it says how it was made, and {@link
+ * Uxid#decode(String)} reads it as any other.
  *
  * <p>Each call takes a {@link UxidOptions} as {@link Uxid#generate(UxidOptions)} does, and the
  * generator keeps its state per prefix and per random width: for each such pair it has seen, the
@@ -56,7 +59,8 @@ import java.util.concurrent.locks.ReentrantLock;
  * whichever thread makes them. The draw source or byte source is called with the lock held. The
  * state lives in the instance alone, with nothing kept in a static field, so two generators never
  * affect each other, and ids from two generators carry no order between them within a millisecond.
- * The state for each pair is kept for the generator's lifetime.
+ * The state for each pair is kept for the generator's lifetime, so it grows by one entry for each
+ * distinct prefix and random width the generator is given.
  *
  * <p><b>A refused call.</b> A call that throws leaves the generator as it was: the state of every
  * pair stays what it was before the call, and the next call starts from it. Draws a refused call

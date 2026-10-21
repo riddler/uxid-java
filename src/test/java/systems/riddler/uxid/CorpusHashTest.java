@@ -2,7 +2,6 @@ package systems.riddler.uxid;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -46,7 +45,7 @@ class CorpusHashTest {
     assertEquals(KINDS, manifest.files().stream().map(Corpus.Entry::kind).toList());
   }
 
-  @Test // (sabotage: SOURCE.json hash edited -> the recorded hash assertion failed)
+  @Test // (sabotage: SOURCE.json tag or sha edited -> the tag or sha assertion failed)
   void sourceJsonRecordsTheSameHashAndTheTagItCameFrom() {
     Fields source = Fields.parse(Corpus.text("SOURCE.json"));
     String repo = source.string("repo");
@@ -56,8 +55,8 @@ class CorpusHashTest {
     source.done();
 
     assertEquals("riddler/uxid-ex", repo);
-    assertTrue(tag.startsWith("v"), tag);
-    assertTrue(sha.matches("[0-9a-f]{40}"), sha);
+    assertEquals("v2.10.0", tag);
+    assertEquals("57235777cb29c70f751552ce7aa20ab5fe71fb74", sha);
     assertEquals(Corpus.manifest().corpusHash(), recorded);
     assertEquals(recorded, Corpus.hash(CASE_FILES));
   }

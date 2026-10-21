@@ -219,6 +219,15 @@ class UxidGenerateTest {
     assertTrue(!java.util.Arrays.equals(first, second), "two draws of 80 bits were equal");
   }
 
+  @Test // (sabotage: prefix UTF-8 encoded in the time path -> assertDoesNotThrow failed)
+  void aTimeBasedIdKeepsAPrefixWithNoUtf8EncodingAsGiven() {
+    TestSources.Counting source = new TestSources.Counting();
+    UxidOptions options =
+        UxidOptions.builder().prefix("us\uD800").size(Size.S).time(TIME).byteSource(source).build();
+
+    assertEquals("us\uD800_01hf7yat000001", assertDoesNotThrow(() -> Uxid.generate(options)));
+  }
+
   /** Reads the standard time from the first 10 characters of a body. */
   private static long standardTime(String body) {
     long time = 0;

@@ -28,7 +28,7 @@ class DecodeClockTest {
         OptionalLong.of(ClockWindow.CASE_TIME - WINDOW), timeAt(COMPACT_S, ClockWindow.START - 1));
   }
 
-  @Test // (sabotage: > ONE_DAY made >= -> the END - 1 assertion failed)
+  @Test // (sabotage: > ONE_DAY made >= -> the END assertion failed)
   void theWindowEndIsExclusiveAndItsLastMillisecondRecoversTheGuardCase() {
     assertEquals(OptionalLong.of(ClockWindow.GUARD_LAST_VALID), timeAt(GUARD, ClockWindow.END - 1));
     assertEquals(

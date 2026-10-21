@@ -135,7 +135,9 @@ public final class UxidOptions {
     /**
      * Sets the prefix, emitted before the delimiter exactly as given. The empty string, the
      * default, is no prefix: the id is the bare body, with no delimiter. A prefix may contain the
-     * delimiter.
+     * delimiter. A prefix is written as given for a time-based id, whatever characters it holds;
+     * for a {@link #from(String) deterministic} id it is hashed as UTF-8, so a prefix holding an
+     * unpaired surrogate is refused when the id is generated.
      *
      * @param prefix the prefix, or {@code ""} for none
      * @return this builder
