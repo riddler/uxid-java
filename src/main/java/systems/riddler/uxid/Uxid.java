@@ -32,6 +32,9 @@ import java.util.Optional;
  * #isValid(String, String, String)} and {@link #isDeterministic(String, String)} answer the two
  * questions most callers ask of a string.
  *
+ * <p>Ids that must increase strictly within one millisecond come from a {@link Monotonic}
+ * generator, an object the caller holds with its own state.
+ *
  * <p>Every method is static and safe to call from several threads at once; the class holds no
  * configuration.
  */
@@ -301,7 +304,8 @@ public final class Uxid {
     }
   }
 
-  private static byte[] draw(ByteSource source, int width) {
+  /** Draws {@code width} bytes from {@code source}, refusing an answer of any other length. */
+  static byte[] draw(ByteSource source, int width) {
     byte[] bytes = source.nextBytes(width);
     if (bytes == null || bytes.length != width) {
       throw new IllegalStateException(
