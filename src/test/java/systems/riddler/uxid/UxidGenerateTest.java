@@ -38,7 +38,7 @@ class UxidGenerateTest {
     assertTrue(time >= before && time <= after, id);
   }
 
-  @Test // (sabotage: the draw asks for width + 1 -> the counts assertion failed)
+  @Test // (sabotage: draw(source, width + 1) at the call site -> the id assertion failed)
   void theByteSourceIsAskedForTheRandomWidthAndFillsTheField() {
     TestSources.Counting source = new TestSources.Counting();
     UxidOptions options =
