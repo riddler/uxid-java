@@ -458,7 +458,6 @@ jobs:
             </servers>
           </settings>
           SETTINGS
-          cat "${RUNNER_TEMP}/settings.xml"
 
       # The only step that reads the secrets (the only `secrets` expressions
       # in this file), into its own environment. The `release` profile rebuilds
