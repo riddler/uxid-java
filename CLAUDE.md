@@ -162,9 +162,10 @@ package it exports, `LICENSE`, `CHANGELOG.md` with the fragment rule in
 `changelog.d/README.md`, and the two workflows: CI
 (`.github/workflows/ci.yml`) and the release workflow
 (`.github/workflows/release.yml`). The package holds time-based and
-deterministic generation (`Uxid.generate` and `UxidOptions`). Decoding, the
-validity checks, the monotonic generator and the vendored corpus arrive
-with later changes; until they do, the sentences in this file about the
+deterministic generation (`Uxid.generate` and `UxidOptions`), decoding
+(`Uxid.decode`, `DecodeOptions` and `DecodeResult`) and the validity checks
+(`Uxid.isValid` and `Uxid.isDeterministic`). The monotonic generator and the
+vendored corpus arrive with later changes; until they do, the sentences in this file about the
 1.0.0 package and its corpus describe the target, not the current tree.
 
 - **The package is `systems.riddler:uxid`.** Version 1.0.0 is its first
