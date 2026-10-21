@@ -187,7 +187,9 @@ public final class Uxid {
    * the clock. So the time comes back exact while the id and the clock fall in the same 2^40 ms
    * window (about 34.8 years) and the id is no more than one day ahead of the clock. With the clock
    * in the first window after the Unix epoch, the window before ends at the epoch, so a time read
-   * from it is negative: nothing clamps it at zero. The clock is read only for a compact body.
+   * from it is negative: nothing clamps it at zero. The clock is read only for a compact body. The
+   * arithmetic is in {@code long}, so a clock within about 2^40 ms of {@link Long#MIN_VALUE} wraps
+   * silently and the time read is meaningless; no real clock is there.
    *
    * <p>A string that is not a well-formed id is refused with the first rule its body breaks,
    * checked in this order: {@link InvalidReason#EMPTY} for an empty body, {@link
@@ -228,6 +230,11 @@ public final class Uxid {
    * has no prefix, so it fails any other. Validity does not depend on the clock, so this reads
    * none.
    *
+   * <p>This is stricter than the Elixir reference's {@code valid?}, which accepts any alphabet body
+   * of at least 8 characters: a body of a length the format does not define is not valid here. The
+   * conformance corpus does not fix this answer; the TypeScript, Rust and .NET ports read it the
+   * same way.
+   *
    * @param id the string to check
    * @param delimiter the delimiter the id was generated with, not empty
    * @param requiredPrefix the prefix the id must carry, or null or {@code ""} for any
@@ -262,7 +269,8 @@ public final class Uxid {
    * Whether {@code id} is a well-formed deterministic id under {@code delimiter}: one {@link
    * #decode(String, DecodeOptions) decode} answers a {@link DecodeResult.Decoded} for whose body
    * starts with the marker {@code z} or {@code Z}. A string that is not well formed is not one,
-   * whatever its first body character. It reads no clock.
+   * whatever its first body character, which is stricter than the Elixir reference's {@code
+   * deterministic?}, which checks only that character. It reads no clock.
    *
    * @param id the string to check
    * @param delimiter the delimiter the id was generated with, not empty

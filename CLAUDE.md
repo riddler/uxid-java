@@ -156,16 +156,16 @@ is `systems.riddler:uxid`, and its module and package are
 `systems.riddler.uxid`.
 
 The tree on `main` today holds these agent instructions, the wurk manifest
-(`.claude/wurk.json`), the tracker files under `.beads/`, the build
-(`pom.xml`, `mise.toml` and `.mvn/jvm.config`), the module descriptor, the
-package it exports, `LICENSE`, `CHANGELOG.md` with the fragment rule in
-`changelog.d/README.md`, the vendored conformance corpus under `conformance/`
-(with `.gitattributes`, which keeps its line endings as committed), and the two
-workflows: CI (`.github/workflows/ci.yml`) and the release workflow
-(`.github/workflows/release.yml`). The package holds time-based and
-deterministic generation (`Uxid.generate` and `UxidOptions`), decoding
-(`Uxid.decode`, `DecodeOptions` and `DecodeResult`), the validity checks
-(`Uxid.isValid` and `Uxid.isDeterministic`) and the monotonic generator
+(`.claude/wurk.json`), the tracker files under `.beads/`, the build (`pom.xml`,
+`mise.toml` and `.mvn/jvm.config`), the module descriptor, the package it
+exports, `LICENSE`, `README.md`, `docs/wire-format.md`, `CHANGELOG.md` with the
+fragment rule in `changelog.d/README.md`, the vendored conformance corpus under
+`conformance/` (with `.gitattributes`, which keeps its line endings as
+committed), and the two workflows: CI (`.github/workflows/ci.yml`) and the
+release workflow (`.github/workflows/release.yml`). The package holds
+time-based and deterministic generation (`Uxid.generate` and `UxidOptions`),
+decoding (`Uxid.decode`, `DecodeOptions` and `DecodeResult`), the validity
+checks (`Uxid.isValid` and `Uxid.isDeterministic`) and the monotonic generator
 (`Monotonic`, with its `DrawSource`). The sentences in this file about the
 1.0.0 package describe the target, not the current tree: it is not yet
 published.
@@ -181,8 +181,8 @@ published.
   worked round here. An answer the corpus does not fix follows uxid-ex's spec
   at that tag.
 
-`README.md`, which a later change adds, is the user reference; `CHANGELOG.md`
-records each release.
+`README.md` is the user reference, and `docs/wire-format.md` points at the
+reference spec at its tag; `CHANGELOG.md` records each release.
 
 ## Build & Test
 

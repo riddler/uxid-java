@@ -96,7 +96,7 @@ class UxidDecodeTest {
     }
   }
 
-  @Test // (sabotage: upper-case folding removed -> the equality failed)
+  @Test // (sabotage: upper-case folding removed -> the decoded() instance check failed)
   void eitherCaseDecodesToTheSameValue() {
     assertEquals(decoded("usr_hf7yat0004hm5"), decoded("usr_HF7YAT0004HM5"));
     assertEquals(decoded("usr_01hf7yat0004h1"), decoded("usr_01Hf7YaT0004h1"));
