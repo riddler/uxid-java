@@ -1,0 +1,509 @@
+name: Release
+
+# Publishes this library (pom.xml's groupId and artifactId) to Maven Central,
+# through the Central Portal, when a version tag is pushed, and only when
+# four things hold at the tagged commit: it is on the default branch, the tag
+# is `v` followed by the version pom.xml states there (the project's own
+# <version>, which must not be a -SNAPSHOT), Maven Central does not already
+# list that version, and the full quality gate is green there. Nothing else
+# triggers it - no branch push, no pull request, no manual dispatch.
+#
+# "Maven Central lists the version" means the version's POM file answers 200
+# at repo1.maven.org, the repository Maven resolves from; 404 means it is not
+# listed, and any other answer stops the step. The search pages at
+# central.sonatype.com are not read: they can lag repo1.maven.org.
+#
+# Two jobs, each checking out the tagged commit (github.sha):
+#
+# - `verify` (contents: read, and no other permission; it reads no secret)
+#   runs the first three checks before anything is installed, then the full
+#   quality gate, then builds the three release jars (the main jar, the
+#   sources jar and the javadoc jar) with `mvn -DskipTests clean package`,
+#   the tests having just passed in the gate. It records the SHA-256 of each
+#   jar in a SHA256SUMS file, uploads the jars and SHA256SUMS as one workflow
+#   artifact, and records the SHA-256 of SHA256SUMS itself as this job's
+#   output.
+# - `publish` (contents: read, and no other permission) starts only when
+#   `verify` succeeded. It runs the version check and the Maven Central check
+#   again rather than trusting `verify`'s result, because a re-run of this
+#   job alone can come long after `verify` ran. It downloads the artifact and
+#   stops unless SHA256SUMS has the SHA-256 `verify` recorded and every jar
+#   in it has the SHA-256 SHA256SUMS lists. mise then installs the JDK and
+#   Maven that mise.toml pins (the ones `verify` built with) and nothing
+#   else. One Maven invocation with the `release` profile (pom.xml) then
+#   rebuilds the three jars without running the tests (`-DskipTests clean
+#   deploy`), refuses unless each one's SHA-256 equals the one SHA256SUMS
+#   lists (the build is reproducible: pom.xml fixes
+#   project.build.outputTimestamp), signs every file it deploys with the
+#   maven-gpg-plugin's Bouncy Castle signer, and deploys them through the
+#   central-publishing-maven-plugin with autoPublish true and waitUntil
+#   published: the signed files go to the Central Portal as one deployment,
+#   the Portal validates it and publishes it to Maven Central, and the
+#   plugin waits, up to sixty minutes, until the Portal reports it
+#   published. The last step prints the version's Central address.
+#
+# Secrets. `publish` is the one job that reads stored credentials, because
+# the Central Portal offers no tokenless (OIDC) publishing and accepts only
+# signed files. It reads four repository secrets: MAVEN_CENTRAL_USERNAME and
+# MAVEN_CENTRAL_PASSWORD (a Central Portal user token) and
+# MAVEN_GPG_PRIVATE_KEY and MAVEN_GPG_PASSPHRASE (the ASCII-armored signing
+# key and its passphrase). The `secrets` expressions that read them appear in
+# this file only in the `env` of `publish`'s deploy step, so their values
+# exist only in that step's environment, the environment of the one Maven
+# invocation above; every plugin that invocation runs could read them. The
+# settings file the step before it writes holds two `${env.NAME}`
+# references, never a value; Maven fills them in when it reads the file. No
+# step prints a value; GitHub also masks a secret's value in the log, a
+# safeguard rather than a guarantee. The checkouts use GitHub's automatic
+# per-job GITHUB_TOKEN, limited to that job's `permissions`, and the
+# artifact upload and download use the credentials the runner provides for
+# the run's own artifact storage.
+#
+# Every action this workflow uses, in both jobs, is pinned to a full commit
+# SHA, with its version in a trailing comment: in `publish` the steps share
+# a runner with the secrets, and in `verify` the actions check out the
+# source the build reads, install the toolchain that builds it and store the
+# jars whose sums `publish` checks, so a moved tag in either job could change
+# what is published.
+#
+# What a failure leaves behind. A failure in `verify` publishes nothing:
+# `publish` does not start and no secret is read. A failure in `publish`
+# before the upload publishes nothing either: a check, a sum that does not
+# match, a signing step without a usable key, or the Portal refusing the
+# token before it accepts the deployment. Once the upload is done the
+# deployment is in the Portal, whatever happens after it. A failure after
+# the upload - in the plugin's wait (a network error, or the sixty minutes
+# running out), the Portal reporting that the deployment failed validation,
+# or the address step - leaves the run red and the deployment in the
+# Portal: one that passed validation goes on to publish, and one that failed
+# validation stays there, unpublished, until the maintainer drops it. No
+# failure moves or deletes the tag.
+#
+# Re-running. The manual act this workflow needs is a re-run from the run's
+# page in the Actions tab, for a run that failed for a reason outside the
+# tagged commit, such as a registry or network error, Maven Central
+# answering the listing check with a status other than 200 or 404, or a gate
+# step that failed on the runner rather than on the code. A run that failed
+# before the upload goes green on a re-run once the cause has passed. For a
+# run whose `publish` job failed after the upload, the maintainer first
+# looks at the deployment in the Portal: a deployment still validating or
+# publishing is waited for, and one that failed validation is dropped there.
+# "Re-run failed jobs" then re-runs `publish` alone, with the artifact and
+# the SHA-256 `verify` recorded (while the artifact is kept). If Maven
+# Central lists the version by then, `publish` reports it, downloads the
+# three listed jars from repo1.maven.org and passes when each has the
+# SHA-256 `verify` recorded, without building, signing or uploading
+# anything, so that re-run goes green; listed jars with other sums fail it.
+# If Maven Central does not list the version, `publish` builds, checks,
+# signs and uploads again. Re-running every job instead re-runs `verify`,
+# which refuses a version Maven Central lists, so that re-run stays red. A
+# failure the tagged commit itself causes (it is not on the default branch,
+# the tag and pom.xml name different versions, the gate is red) fails the
+# same way on every re-run.
+#
+# Remedies. A version Maven Central lists is permanent: Maven Central never
+# deletes or replaces a published file, so a broken release is followed by
+# a new patch version, through a new release prep and the tag that names it,
+# never by publishing the same version again. A deployment that failed
+# validation is never published; the maintainer drops it in the Portal
+# (Deployments), and a re-run then uploads it afresh. This workflow never
+# drops, deletes or publishes a deployment in the Portal by any other path.
+#
+# Before the first publish, the maintainer verifies the systems.riddler
+# namespace on the Central Portal, publishes the signing key's public half to
+# a public keyserver, creates a Portal user token, and sets the four secrets
+# on this repository; until then the signing step or the upload fails and
+# nothing is published.
+#
+# This file records the publish decision for this repository, which keeps no
+# decision records (CLAUDE.md, "Agent authority in this repo": the "Release
+# preps" paragraph and the paragraphs after it, which name the secrets and
+# say where a release decision is recorded). This workflow is the only
+# publisher: it publishes on the push of the tag that names a merged release
+# prep. An agent or a session never deploys to Maven Central, never signs a
+# release and never reads a secret, and a failed run is re-run from its
+# Actions page, never worked round by a local publish.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+# The default for every job: contents: read, every other permission none.
+# Each job states its own permissions below; neither adds any. The tag
+# already exists when this runs, and nothing here creates or pushes one.
+permissions:
+  contents: read
+
+# One run per tag, and a run in progress is never cancelled: a publish cut
+# off part way is worse than one that finishes.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify, gate and build the jars
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    # contents: read for the checkout and the default branch fetch.
+    permissions:
+      contents: read
+
+    # The SHA-256 of SHA256SUMS, which `publish` matches before it builds.
+    outputs:
+      sums_sha256: ${{ steps.build.outputs.sums_sha256 }}
+
+    steps:
+      # The tagged commit, by SHA. Full history: the ancestry check below
+      # walks it.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      # The default branch is read from the push event itself, never written
+      # here, so a renamed default branch needs no edit to this file.
+      - name: Fetch the default branch
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          test -n "$DEFAULT_BRANCH" || { echo "::error::the push event names no default branch" >&2; exit 1; }
+          git fetch --no-tags origin "+refs/heads/${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}"
+
+      - name: Check the tagged commit is on the default branch
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          commit="$(git rev-parse 'HEAD^{commit}')"
+          if ! git merge-base --is-ancestor "$commit" "origin/${DEFAULT_BRANCH}"; then
+            echo "::error::${GITHUB_REF_NAME} is on ${commit}, which is not on ${DEFAULT_BRANCH}; nothing is published" >&2
+            exit 1
+          fi
+          echo "${GITHUB_REF_NAME} is on ${commit}, which is on ${DEFAULT_BRANCH}"
+
+      # pom.xml is read with Python's XML reader (on the runner already), not
+      # with Maven, so this check runs before any toolchain is installed. Only
+      # the project's own <version> is read, never a parent's, a plugin's or
+      # a dependency's. `publish` runs the same check again.
+      - name: Check the tag names the version in pom.xml
+        run: |
+          set -euo pipefail
+          pom_field() { python3 -c 'import sys, xml.etree.ElementTree as ET; ns = {"m": "http://maven.apache.org/POM/4.0.0"}; print(ET.parse("pom.xml").getroot().findtext("m:" + sys.argv[1], default="", namespaces=ns).strip())' "$1"; }
+          tag_version="${GITHUB_REF_NAME#v}"
+          pom_version="$(pom_field version)"
+          test -n "$pom_version" || { echo "::error::no project <version> in pom.xml at the tagged commit" >&2; exit 1; }
+          case "$pom_version" in
+            *-SNAPSHOT) echo "::error::pom.xml at the tagged commit says ${pom_version}, a snapshot; nothing is published" >&2; exit 1 ;;
+          esac
+          if [ "$tag_version" != "$pom_version" ]; then
+            echo "::error::${GITHUB_REF_NAME} names ${tag_version} but pom.xml at the tagged commit says ${pom_version}; nothing is published" >&2
+            exit 1
+          fi
+          echo "${GITHUB_REF_NAME} matches pom.xml version ${pom_version}"
+
+      # A version Maven Central lists is reported, never published again
+      # (Maven Central would refuse it anyway). The coordinates are read from
+      # pom.xml, so the version checked is the version of the library this
+      # run would publish. This read needs no credential. `publish` runs the
+      # same check again.
+      - name: Check Maven Central does not list this version
+        run: |
+          set -euo pipefail
+          pom_field() { python3 -c 'import sys, xml.etree.ElementTree as ET; ns = {"m": "http://maven.apache.org/POM/4.0.0"}; print(ET.parse("pom.xml").getroot().findtext("m:" + sys.argv[1], default="", namespaces=ns).strip())' "$1"; }
+          group="$(pom_field groupId)"
+          artifact="$(pom_field artifactId)"
+          version="${GITHUB_REF_NAME#v}"
+          url="https://repo1.maven.org/maven2/${group//.//}/${artifact}/${version}/${artifact}-${version}.pom"
+          status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 60 "$url")" || status=000
+          echo "${url} answered ${status}"
+          case "$status" in
+            404) echo "${group}:${artifact}:${version} is not on Maven Central yet" ;;
+            200) echo "::error::${group}:${artifact}:${version} is already on Maven Central; reported, not published again" >&2; exit 1 ;;
+            *) echo "::error::Maven Central answered ${status} for ${group}:${artifact}:${version}; nothing is published" >&2; exit 1 ;;
+          esac
+
+      # --- the toolchain and the full quality gate, exactly as ci.yml's gate
+      # job runs them.
+
+      # The toolchain comes from mise.toml, provisioned by mise itself: the
+      # Temurin JDK and Maven at the versions pinned there. No tool cache is
+      # restored in either job of this workflow: a release installs its tools
+      # fresh rather than from a cache another run wrote.
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: 2026.8.2
+          cache: false
+
+      # The command is read out of .claude/wurk.json (gate.full), the gate an
+      # agent must have green before committing. It is read and executed
+      # inside the step rather than interpolated into `run:`, so a repository
+      # file never reaches the shell as expression text.
+      - name: Full quality gate
+        run: |
+          set -euo pipefail
+          mapfile -t cmd < <(jq -er '.gate.full[]' .claude/wurk.json)
+          test "${#cmd[@]}" -gt 0 || { echo "::error::gate.full is empty" >&2; exit 1; }
+          echo "gate command (.claude/wurk.json gate.full): ${cmd[*]}"
+          "${cmd[@]}"
+
+      # --- end of the gate.
+
+      # The gate's build output lands under target/, which .gitignore covers.
+      # A gate that left any changed file, or any untracked file that is not
+      # ignored, stops the release here, with the files named.
+      - name: Check the gate left the checkout clean
+        run: |
+          set -euo pipefail
+          if [ -n "$(git status --porcelain)" ]; then
+            git status --short
+            echo "::error::the gate left changed or untracked files; nothing is published" >&2
+            exit 1
+          fi
+
+      # The release jars, built by the same command `publish` runs without
+      # the release profile, so the two builds produce the same bytes. The
+      # step stops unless the three jars exist; SHA256SUMS lists the SHA-256
+      # of each, and the SHA-256 of SHA256SUMS is this job's output.
+      - name: Build the release jars and record their SHA-256
+        id: build
+        run: |
+          set -euo pipefail
+          pom_field() { python3 -c 'import sys, xml.etree.ElementTree as ET; ns = {"m": "http://maven.apache.org/POM/4.0.0"}; print(ET.parse("pom.xml").getroot().findtext("m:" + sys.argv[1], default="", namespaces=ns).strip())' "$1"; }
+          artifact="$(pom_field artifactId)"
+          version="${GITHUB_REF_NAME#v}"
+          mise exec -- mvn -B -ntp -DskipTests clean package
+          release="${RUNNER_TEMP}/release"
+          rm -rf "$release"
+          mkdir -p "${release}/jars"
+          for suffix in "" "-sources" "-javadoc"; do
+            jar="target/${artifact}-${version}${suffix}.jar"
+            test -f "$jar" || { echo "::error::the build left no ${jar}; nothing is published" >&2; exit 1; }
+            cp "$jar" "${release}/jars/"
+          done
+          cd "$release"
+          sha256sum "jars/${artifact}-${version}.jar" "jars/${artifact}-${version}-sources.jar" "jars/${artifact}-${version}-javadoc.jar" > SHA256SUMS
+          cat SHA256SUMS
+          sums_sha256="$(sha256sum SHA256SUMS | cut -d ' ' -f 1)"
+          echo "SHA256SUMS sha256 ${sums_sha256}"
+          echo "sums_sha256=${sums_sha256}" >> "$GITHUB_OUTPUT"
+
+      # The three jars and SHA256SUMS, as one artifact `publish` downloads.
+      - name: Upload the jars and their SHA-256
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-jars
+          path: ${{ runner.temp }}/release/
+          if-no-files-found: error
+
+  publish:
+    name: Sign and publish to Maven Central
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    # contents: read for the checkout, and no other permission.
+    permissions:
+      contents: read
+
+    # mise installs only the JDK and Maven in this job (install_args below);
+    # with auto-install off, `mise exec` never installs anything else.
+    env:
+      MISE_EXEC_AUTO_INSTALL: "false"
+
+    steps:
+      # The same commit `verify` checked out. Nothing here fetches again, so
+      # the checkout keeps no credential in the repository's git config.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      # The same check as in `verify`, run again here: a re-run of this job
+      # alone does not re-run `verify`.
+      - name: Check the tag names the version in pom.xml
+        run: |
+          set -euo pipefail
+          pom_field() { python3 -c 'import sys, xml.etree.ElementTree as ET; ns = {"m": "http://maven.apache.org/POM/4.0.0"}; print(ET.parse("pom.xml").getroot().findtext("m:" + sys.argv[1], default="", namespaces=ns).strip())' "$1"; }
+          tag_version="${GITHUB_REF_NAME#v}"
+          pom_version="$(pom_field version)"
+          test -n "$pom_version" || { echo "::error::no project <version> in pom.xml at the tagged commit" >&2; exit 1; }
+          case "$pom_version" in
+            *-SNAPSHOT) echo "::error::pom.xml at the tagged commit says ${pom_version}, a snapshot; nothing is published" >&2; exit 1 ;;
+          esac
+          if [ "$tag_version" != "$pom_version" ]; then
+            echo "::error::${GITHUB_REF_NAME} names ${tag_version} but pom.xml at the tagged commit says ${pom_version}; nothing is published" >&2
+            exit 1
+          fi
+          echo "${GITHUB_REF_NAME} matches pom.xml version ${pom_version}"
+
+      # The same read as in `verify`, run again here, where a listed version
+      # does not fail the step: it sends this job down the path that checks
+      # the listed jars instead of publishing (the header's "Re-running").
+      - name: Check whether Maven Central lists this version
+        id: central
+        run: |
+          set -euo pipefail
+          pom_field() { python3 -c 'import sys, xml.etree.ElementTree as ET; ns = {"m": "http://maven.apache.org/POM/4.0.0"}; print(ET.parse("pom.xml").getroot().findtext("m:" + sys.argv[1], default="", namespaces=ns).strip())' "$1"; }
+          group="$(pom_field groupId)"
+          artifact="$(pom_field artifactId)"
+          version="${GITHUB_REF_NAME#v}"
+          url="https://repo1.maven.org/maven2/${group//.//}/${artifact}/${version}/${artifact}-${version}.pom"
+          status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 60 "$url")" || status=000
+          echo "${url} answered ${status}"
+          case "$status" in
+            404)
+              echo "${group}:${artifact}:${version} is not on Maven Central yet; this job builds, signs and publishes it"
+              echo "listed=false" >> "$GITHUB_OUTPUT"
+              ;;
+            200)
+              echo "::notice::${group}:${artifact}:${version} is already on Maven Central; this job checks the listed jars against the ones verify built and publishes nothing"
+              echo "listed=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *) echo "::error::Maven Central answered ${status} for ${group}:${artifact}:${version}; nothing is published" >&2; exit 1 ;;
+          esac
+
+      - name: Download the jars verify built
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-jars
+          path: ${{ runner.temp }}/release
+
+      # SHA256SUMS has the SHA-256 `verify` recorded, each jar it lists has
+      # the SHA-256 it lists, and the artifact holds those jars and no other
+      # file, or nothing is published.
+      - name: Match the jars to the ones verify built
+        env:
+          VERIFIED_SUMS_SHA256: ${{ needs.verify.outputs.sums_sha256 }}
+        run: |
+          set -euo pipefail
+          test -n "$VERIFIED_SUMS_SHA256" || { echo "::error::verify recorded no SHA256SUMS SHA-256; nothing is published" >&2; exit 1; }
+          cd "${RUNNER_TEMP}/release"
+          test -f SHA256SUMS || { echo "::error::the artifact holds no SHA256SUMS; nothing is published" >&2; exit 1; }
+          sums_sha256="$(sha256sum SHA256SUMS | cut -d ' ' -f 1)"
+          if [ "$sums_sha256" != "$VERIFIED_SUMS_SHA256" ]; then
+            echo "::error::SHA256SUMS has sha256 ${sums_sha256}, but the one verify wrote has ${VERIFIED_SUMS_SHA256}; nothing is published" >&2
+            exit 1
+          fi
+          sha256sum --check --strict SHA256SUMS || { echo "::error::a jar does not match SHA256SUMS; nothing is published" >&2; exit 1; }
+          listed="$(cut -d ' ' -f 3 SHA256SUMS | sort)"
+          present="$(find jars -type f | sort)"
+          if [ "$listed" != "$present" ]; then
+            printf 'listed:\n%s\npresent:\n%s\n' "$listed" "$present"
+            echo "::error::the artifact holds files SHA256SUMS does not list; nothing is published" >&2
+            exit 1
+          fi
+          echo "the jars match the SHA256SUMS verify wrote (sha256 ${sums_sha256})"
+
+      # The re-run path: the version is already listed, so nothing is built,
+      # signed or uploaded. The step passes only when each of the three jars
+      # Maven Central lists has the SHA-256 `verify` recorded.
+      - name: Match the jars Maven Central lists to the ones verify built
+        if: steps.central.outputs.listed == 'true'
+        run: |
+          set -euo pipefail
+          pom_field() { python3 -c 'import sys, xml.etree.ElementTree as ET; ns = {"m": "http://maven.apache.org/POM/4.0.0"}; print(ET.parse("pom.xml").getroot().findtext("m:" + sys.argv[1], default="", namespaces=ns).strip())' "$1"; }
+          group="$(pom_field groupId)"
+          artifact="$(pom_field artifactId)"
+          version="${GITHUB_REF_NAME#v}"
+          base="https://repo1.maven.org/maven2/${group//.//}/${artifact}/${version}"
+          listed="${RUNNER_TEMP}/listed"
+          rm -rf "$listed"
+          mkdir -p "$listed"
+          for suffix in "" "-sources" "-javadoc"; do
+            name="${artifact}-${version}${suffix}.jar"
+            status="$(curl -sS -o "${listed}/${name}" -w '%{http_code}' --max-time 120 "${base}/${name}")" || status=000
+            echo "${base}/${name} answered ${status}"
+            test "$status" = 200 || { echo "::error::Maven Central answered ${status} for ${name}; re-run this job once it lists every jar" >&2; exit 1; }
+            want="$(awk -v f="jars/${name}" '$2 == f { print $1 }' "${RUNNER_TEMP}/release/SHA256SUMS")"
+            got="$(sha256sum "${listed}/${name}" | cut -d ' ' -f 1)"
+            test -n "$want" || { echo "::error::SHA256SUMS lists no ${name}" >&2; exit 1; }
+            if [ "$got" != "$want" ]; then
+              echo "::error::the ${name} Maven Central lists has sha256 ${got}, but the one verify built has ${want}" >&2
+              exit 1
+            fi
+            echo "${name} on Maven Central has sha256 ${got}, the one verify built"
+          done
+          echo "${group}:${artifact}:${version} is on Maven Central with the jars verify built; nothing was published by this run"
+
+      # The JDK and Maven mise.toml pins, the ones `verify` built with, and
+      # nothing else: `install_args` names the two tools mise installs.
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        if: steps.central.outputs.listed == 'false'
+        with:
+          version: 2026.8.2
+          cache: false
+          install_args: java maven
+
+      # A settings file naming the Central Portal server the publishing
+      # plugin authenticates to (pom.xml's publishingServerId). It holds two
+      # `${env.NAME}` references, never a value: Maven reads them from the
+      # deploy step's environment. Written outside the checkout, through a
+      # quoted here-document, so the shell expands nothing in it.
+      - name: Write the Maven settings for the Central Portal
+        if: steps.central.outputs.listed == 'false'
+        run: |
+          set -euo pipefail
+          cat > "${RUNNER_TEMP}/settings.xml" <<'SETTINGS'
+          <settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">
+            <servers>
+              <server>
+                <id>central</id>
+                <username>${env.MAVEN_CENTRAL_USERNAME}</username>
+                <password>${env.MAVEN_CENTRAL_PASSWORD}</password>
+              </server>
+            </servers>
+          </settings>
+          SETTINGS
+          cat "${RUNNER_TEMP}/settings.xml"
+
+      # The only step that reads the secrets (the only `secrets` expressions
+      # in this file), into its own environment. The `release` profile rebuilds
+      # the three jars without the tests, refuses unless their SHA-256 values
+      # equal the ones SHA256SUMS lists, signs them and the POM with the
+      # Bouncy Castle signer (which reads MAVEN_GPG_PRIVATE_KEY and
+      # MAVEN_GPG_PASSPHRASE from the environment), then uploads the signed
+      # files to the Central Portal as one deployment, publishes it
+      # (autoPublish) and waits until the Portal reports it published. No git
+      # tag is created or pushed.
+      - name: Rebuild, check, sign and publish
+        if: steps.central.outputs.listed == 'false'
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          MAVEN_GPG_PRIVATE_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          pom_field() { python3 -c 'import sys, xml.etree.ElementTree as ET; ns = {"m": "http://maven.apache.org/POM/4.0.0"}; print(ET.parse("pom.xml").getroot().findtext("m:" + sys.argv[1], default="", namespaces=ns).strip())' "$1"; }
+          artifact="$(pom_field artifactId)"
+          version="${GITHUB_REF_NAME#v}"
+          sum_of() { awk -v f="jars/$1" '$2 == f { print $1 }' "${RUNNER_TEMP}/release/SHA256SUMS"; }
+          jar_sum="$(sum_of "${artifact}-${version}.jar")"
+          sources_sum="$(sum_of "${artifact}-${version}-sources.jar")"
+          javadoc_sum="$(sum_of "${artifact}-${version}-javadoc.jar")"
+          for sum in "$jar_sum" "$sources_sum" "$javadoc_sum"; do
+            test -n "$sum" || { echo "::error::SHA256SUMS does not list all three jars; nothing is published" >&2; exit 1; }
+          done
+          mise exec -- java -version
+          mise exec -- mvn -B -ntp -s "${RUNNER_TEMP}/settings.xml" -P release -DskipTests \
+            -Duxid.release.sha256.jar="$jar_sum" \
+            -Duxid.release.sha256.sources="$sources_sum" \
+            -Duxid.release.sha256.javadoc="$javadoc_sum" \
+            clean deploy
+
+      # The search page at central.sonatype.com and the repo1.maven.org
+      # directory each read from the Portal's publish on their own schedule,
+      # so either may lag the publish by some minutes.
+      - name: Print the published version's addresses
+        run: |
+          set -euo pipefail
+          pom_field() { python3 -c 'import sys, xml.etree.ElementTree as ET; ns = {"m": "http://maven.apache.org/POM/4.0.0"}; print(ET.parse("pom.xml").getroot().findtext("m:" + sys.argv[1], default="", namespaces=ns).strip())' "$1"; }
+          group="$(pom_field groupId)"
+          artifact="$(pom_field artifactId)"
+          version="${GITHUB_REF_NAME#v}"
+          echo "https://central.sonatype.com/artifact/${group}/${artifact}/${version}"
+          echo "https://repo1.maven.org/maven2/${group//.//}/${artifact}/${version}/"

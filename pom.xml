@@ -144,6 +144,18 @@
           <artifactId>spotless-maven-plugin</artifactId>
           <version>3.10.4</version>
         </plugin>
+        <!-- The signer and the publisher, used only by the release profile
+             below. -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-gpg-plugin</artifactId>
+          <version>3.2.8</version>
+        </plugin>
+        <plugin>
+          <groupId>org.sonatype.central</groupId>
+          <artifactId>central-publishing-maven-plugin</artifactId>
+          <version>0.12.0</version>
+        </plugin>
       </plugins>
     </pluginManagement>
 
@@ -313,4 +325,95 @@
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <!-- The release profile. Only the publish job of
+         .github/workflows/release.yml activates it (`-P release`, with
+         `-DskipTests` and `deploy`); the gate never does, so the gate never
+         signs or deploys anything. In the verify phase, after the package
+         phase has built the main, sources and javadoc jars, it first refuses
+         unless each jar's SHA-256 equals the one the workflow passes in
+         (uxid.release.sha256.jar, uxid.release.sha256.sources and
+         uxid.release.sha256.javadoc, the sums the workflow's verify job
+         recorded; a property left unset never matches), then signs every
+         file with the Bouncy Castle signer, which reads the key and its
+         passphrase from the environment variables named below. In the deploy
+         phase the Central Portal's publishing plugin uploads the signed files
+         as one deployment and waits until the Portal has published it. -->
+    <profile>
+      <id>release</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-enforcer-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>release-jar-sums</id>
+                <phase>verify</phase>
+                <goals>
+                  <goal>enforce</goal>
+                </goals>
+                <configuration>
+                  <rules>
+                    <requireFileChecksum>
+                      <file>${project.build.directory}/${project.build.finalName}.jar</file>
+                      <type>sha256</type>
+                      <checksum>${uxid.release.sha256.jar}</checksum>
+                      <message>The main jar differs from the one the release workflow verified; nothing is signed or published.</message>
+                    </requireFileChecksum>
+                    <requireFileChecksum>
+                      <file>${project.build.directory}/${project.build.finalName}-sources.jar</file>
+                      <type>sha256</type>
+                      <checksum>${uxid.release.sha256.sources}</checksum>
+                      <message>The sources jar differs from the one the release workflow verified; nothing is signed or published.</message>
+                    </requireFileChecksum>
+                    <requireFileChecksum>
+                      <file>${project.build.directory}/${project.build.finalName}-javadoc.jar</file>
+                      <type>sha256</type>
+                      <checksum>${uxid.release.sha256.javadoc}</checksum>
+                      <message>The javadoc jar differs from the one the release workflow verified; nothing is signed or published.</message>
+                    </requireFileChecksum>
+                  </rules>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-gpg-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>sign</id>
+                <phase>verify</phase>
+                <goals>
+                  <goal>sign</goal>
+                </goals>
+                <configuration>
+                  <signer>bc</signer>
+                  <bestPractices>true</bestPractices>
+                  <keyEnvName>MAVEN_GPG_PRIVATE_KEY</keyEnvName>
+                  <passphraseEnvName>MAVEN_GPG_PASSPHRASE</passphraseEnvName>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+
+          <plugin>
+            <groupId>org.sonatype.central</groupId>
+            <artifactId>central-publishing-maven-plugin</artifactId>
+            <extensions>true</extensions>
+            <configuration>
+              <publishingServerId>central</publishingServerId>
+              <autoPublish>true</autoPublish>
+              <waitUntil>published</waitUntil>
+              <waitMaxTime>3600</waitMaxTime>
+              <deploymentName>${project.groupId}:${project.artifactId}:${project.version}</deploymentName>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>
