@@ -106,16 +106,16 @@ job, and no other job or workflow, reads stored credentials the operator
 sets, as four repository secrets named `MAVEN_CENTRAL_USERNAME`,
 `MAVEN_CENTRAL_PASSWORD`, `MAVEN_GPG_PRIVATE_KEY` and `MAVEN_GPG_PASSPHRASE`
 (ruled by the operator, 2026-10-21). An agent or a session names them in
-workflow code only by name, only in that publish job; it never lists, reads, prints, sets or holds a value, never runs
-`gh secret` against this repository, and never adds a step that could print
-one. A workflow log that shows a secret value is a stop for the operator. The
-first publish has prerequisites that are the operator's own steps in consoles
-no agent opens: the `systems.riddler` namespace verified on the Central
-Portal, a signing key with its public half on a public keyserver, a Central
-Portal user token, and the four secrets set on this repository. Merging the
-prep follows this file's merge row, and nothing else this file reserves for
-the operator changes. A prep is cut only on a green full gate, which will
-include the conformance corpus check.
+workflow code only by name, only in that publish job; it never lists, reads,
+prints, sets or holds a value, never runs `gh secret` against this repository,
+and never adds a step that could print one. A workflow log that shows a secret
+value is a stop for the operator. The first publish has prerequisites that are
+the operator's own steps in consoles no agent opens: the `systems.riddler`
+namespace verified on the Central Portal, a signing key with its public half
+on a public keyserver, a Central Portal user token, and the four secrets set
+on this repository. Merging the prep follows this file's merge row, and
+nothing else this file reserves for the operator changes. A prep is cut only
+on a green full gate, which will include the conformance corpus check.
 
 This repository keeps no decision records (`docs/adr`). A release or gating
 decision is recorded here, in the authority table and the Release preps
@@ -154,12 +154,13 @@ checks; it has no runtime dependencies, takes its random bytes from
 is `systems.riddler:uxid`, and its module and package are
 `systems.riddler.uxid`.
 
-The tree on `main` today holds only these agent instructions, the wurk
-manifest (`.claude/wurk.json`), the tracker files under `.beads/` and a
-`.gitignore`. The library, `pom.xml`, the gate tasks, CI, the release workflow
-and the vendored corpus arrive with later changes; until they do, the
-sentences in this file about the 1.0.0 package, its corpus, its gate and its
-workflows describe the target, not the current tree.
+The tree on `main` today holds these agent instructions, the wurk manifest
+(`.claude/wurk.json`), the tracker files under `.beads/`, the build
+(`pom.xml`, `mise.toml` and `.mvn/jvm.config`), the module descriptor, the
+package it exports (no public type yet), `LICENSE` and `CHANGELOG.md`. The
+library, CI, the release workflow and the vendored corpus arrive with later
+changes; until they do, the sentences in this file about the 1.0.0 package,
+its corpus and its workflows describe the target, not the current tree.
 
 - **The package is `systems.riddler:uxid`.** Version 1.0.0 is its first
   release on Maven Central.
@@ -170,13 +171,12 @@ workflows describe the target, not the current tree.
   against uxid-ex with its evidence, never skipped or worked round here. An
   answer the corpus does not fix follows uxid-ex's spec at that tag.
 
-`README.md`, which a later change adds, is the user reference; `CHANGELOG.md`,
-which the scaffold adds, records each release.
+`README.md`, which a later change adds, is the user reference; `CHANGELOG.md`
+records each release.
 
 ## Build & Test
 
-The gate tasks live in `mise.toml`, which the scaffold adds; on a tree without
-it these commands do not run yet.
+The gate tasks live in `mise.toml`.
 
 ```bash
 mise install            # the JDK, Maven and the tools mise.toml pins
@@ -184,11 +184,14 @@ mise run gate:loop      # inner loop
 mise run gate           # full gate
 ```
 
-Once the change that adds the gate tasks lands, the full gate will print
-`java -version` first and then run `mvn -B -ntp verify`: the Spotless format
-check (google-java-format), the compile with Error Prone, the JUnit 5 tests,
-the JaCoCo check at 90 percent of lines, the sources and javadoc jars, and the
-conformance corpus check once the corpus is vendored.
+The full gate prints `java -version` first and then runs `mvn -B -ntp
+verify`: the enforcer rules (Maven 3.9 or later, every plugin version pinned,
+no dependency outside test scope), the compile with every javac lint and Error
+Prone, a warning failing it, the JUnit 5 tests, the jar and the sources and
+javadoc jars, the Spotless format check (google-java-format) and the JaCoCo
+check at 90 percent of lines; the conformance corpus check joins it once the
+corpus is vendored. The inner loop, `mise run gate:loop`, is `mvn -B -ntp
+test`: the compile and the tests.
 
 The gate runs on the JDK `mise.toml` pins (Temurin 25, with Maven 3.9). The
 toolchain floor is declared separately: `maven.compiler.release` 17 in
@@ -256,9 +259,9 @@ satellite conventions rather than inventing a second set.
   and the tests run on Java 17, 21 and 25 in CI once CI lands (ruled by the
   operator, 2026-10-21). The coverage bar is 90 percent of lines (decided by
   the conductor under a standing consent, 2026-10-21).
-- **One module.** The library's `module-info.java`, which the scaffold adds,
-  declares the module `systems.riddler.uxid` and exports its one package
-  (decided by the conductor under a standing consent, 2026-10-21).
+- **One module.** The library's `module-info.java` declares the module
+  `systems.riddler.uxid` and exports its one package (decided by the
+  conductor under a standing consent, 2026-10-21).
 - **Tests use JUnit 5** under `src/test/java/`. Every public class, method and
   constructor carries Javadoc.
 - Sabotage every new test that asserts library behavior: break the code it

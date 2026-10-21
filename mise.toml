@@ -1,0 +1,25 @@
+# mise config for uxid-java: the toolchain and the gate tasks.
+#
+#   mise install          provision the toolchain below
+#   mise run gate:loop    inner loop: compile and tests
+#   mise run gate         full gate, the advancement gate
+#
+# The JDK and Maven are pinned here, and mise exports this JDK as JAVA_HOME,
+# so Maven runs on it. pom.xml declares `maven.compiler.release` 17, the
+# oldest Java the jars support, while the JDK that builds and gates them is
+# this one. The gate prints `java -version` first so its log names that JDK.
+
+[tools]
+java = "temurin-25.0.4+7.0.LTS"
+maven = "3.9.16"
+
+[tasks."gate:loop"]
+description = "Inner loop: compile and tests"
+run = "mvn -B -ntp test"
+
+[tasks.gate]
+description = "Full gate: format check, compile, tests, coverage check, jars"
+run = [
+  "java -version",
+  "mvn -B -ntp verify",
+]
