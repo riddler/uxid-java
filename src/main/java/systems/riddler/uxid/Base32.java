@@ -15,6 +15,24 @@ final class Base32 {
   }
 
   /**
+   * The 5-bit value of a symbol in either case, or -1 for any other character: the letters {@code
+   * I}, {@code L}, {@code O} and {@code U} are not symbols and are not read as {@code 1} or {@code
+   * 0}.
+   */
+  static int value(char c) {
+    if (c >= 'A' && c <= 'Z') {
+      c = (char) (c + ('a' - 'A'));
+    }
+    if (c >= '0' && c <= '9') {
+      return c - '0';
+    }
+    if (c >= 'a' && c <= 'z') {
+      return LOWER.indexOf(c);
+    }
+    return -1;
+  }
+
+  /**
    * Appends {@code chars} characters holding {@code value}, whose width is at most {@code chars x
    * 5} bits; the first group is the short one when the width is not a multiple of 5.
    */
