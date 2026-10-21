@@ -116,7 +116,7 @@ namespace verified on the Central Portal, a signing key with its public half
 on a public keyserver, a Central Portal user token, and the four secrets set
 on this repository. Merging the prep follows this file's merge row, and
 nothing else this file reserves for the operator changes. A prep is cut only
-on a green full gate, which will include the conformance corpus check.
+on a green full gate, which includes the conformance corpus check.
 
 This repository keeps no decision records (`docs/adr`). A release or gating
 decision is recorded here, in the authority table and the Release preps
@@ -124,10 +124,10 @@ paragraphs, and in the header of the workflow it governs; a change a user of
 the API could notice is a changelog fragment (Conventions, below). The ID
 format itself is not decided here: it is uxid-ex's wire-format spec,
 `guides/wire-format.md` in https://github.com/riddler/uxid-ex, read at the
-tag the vendored corpus names (`conformance/SOURCE.json`, once the corpus is
-vendored). That this repository keeps no decision records was decided by the
-conductor under a standing consent, 2026-10-21; a future API decision may
-start a `docs/adr` directory.
+tag the vendored corpus names (`conformance/SOURCE.json`). That this
+repository keeps no decision records was decided by the conductor under a
+standing consent, 2026-10-21; a future API decision may start a `docs/adr`
+directory.
 
 Widening this section is a decision for the operator to make and record here.
 An agent may draft the change; it does not adopt it.
@@ -159,24 +159,27 @@ The tree on `main` today holds these agent instructions, the wurk manifest
 (`.claude/wurk.json`), the tracker files under `.beads/`, the build
 (`pom.xml`, `mise.toml` and `.mvn/jvm.config`), the module descriptor, the
 package it exports, `LICENSE`, `CHANGELOG.md` with the fragment rule in
-`changelog.d/README.md`, and the two workflows: CI
-(`.github/workflows/ci.yml`) and the release workflow
+`changelog.d/README.md`, the vendored conformance corpus under `conformance/`
+(with `.gitattributes`, which keeps its line endings as committed), and the two
+workflows: CI (`.github/workflows/ci.yml`) and the release workflow
 (`.github/workflows/release.yml`). The package holds time-based and
 deterministic generation (`Uxid.generate` and `UxidOptions`), decoding
 (`Uxid.decode`, `DecodeOptions` and `DecodeResult`), the validity checks
 (`Uxid.isValid` and `Uxid.isDeterministic`) and the monotonic generator
-(`Monotonic`, with its `DrawSource`). The vendored corpus arrives with a later
-change; until it does, the sentences in this file about the 1.0.0 package and
-its corpus describe the target, not the current tree.
+(`Monotonic`, with its `DrawSource`). The sentences in this file about the
+1.0.0 package describe the target, not the current tree: it is not yet
+published.
 
 - **The package is `systems.riddler:uxid`.** Version 1.0.0 is its first
   release on Maven Central.
-- **The corpus is the arbiter.** `conformance/` will hold the corpus
-  vendored from uxid-ex at a release tag, its tag, commit and hash recorded in
-  `conformance/SOURCE.json`. The vendored files are never edited, and every
-  case passes with no skip list: a case this port cannot pass is reported
-  against uxid-ex with its evidence, never skipped or worked round here. An
-  answer the corpus does not fix follows uxid-ex's spec at that tag.
+- **The corpus is the arbiter.** `conformance/` holds the corpus vendored from
+  uxid-ex at the release tag `v2.10.0` (case files, `manifest.json`, `schema/`
+  and `README.md`, byte for byte; not the generator `source/`), its tag,
+  commit and hash recorded in `conformance/SOURCE.json`. The vendored files
+  are never edited, and every case passes with no skip list: a case this port
+  cannot pass is reported against uxid-ex with its evidence, never skipped or
+  worked round here. An answer the corpus does not fix follows uxid-ex's spec
+  at that tag.
 
 `README.md`, which a later change adds, is the user reference; `CHANGELOG.md`
 records each release.
@@ -196,9 +199,11 @@ verify`: the enforcer rules (Maven 3.9 or later, every plugin version pinned,
 no dependency outside test scope), the compile with every javac lint and Error
 Prone, a warning failing it, the JUnit 5 tests, the jar and the sources and
 javadoc jars, the Spotless format check (google-java-format) and the JaCoCo
-check at 90 percent of lines; the conformance corpus check joins it once the
-corpus is vendored. The inner loop, `mise run gate:loop`, is `mvn -B -ntp
-test`: the compile and the tests.
+check at 90 percent of lines. The conformance corpus check is part of the
+tests: a test recomputes the corpus hash and each case count by the
+reference's rule, and a runner (`CorpusRunnerTest`) runs every case of every
+case file, with no skip list, rejecting a case key it does not know. The inner
+loop, `mise run gate:loop`, is `mvn -B -ntp test`: the compile and the tests.
 
 The gate runs on the JDK `mise.toml` pins (Temurin 25, with Maven 3.9). The
 toolchain floor is declared separately: `maven.compiler.release` 17 in

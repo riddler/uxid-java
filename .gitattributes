@@ -1,0 +1,2 @@
+# The vendored corpus is compared byte for byte; no line-ending conversion.
+conformance/** -text
