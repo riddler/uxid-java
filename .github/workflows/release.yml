@@ -88,6 +88,10 @@ name: Release
 # run whose `publish` job failed after the upload, the maintainer first
 # looks at the deployment in the Portal: a deployment still validating or
 # publishing is waited for, and one that failed validation is dropped there.
+# A deployment the Portal reports published is then waited for at
+# repo1.maven.org, until the version's POM answers 200 there: repo1 can lag
+# the Portal by some minutes, and a re-run inside that window finds the
+# version not listed and builds, signs and uploads it again.
 # "Re-run failed jobs" then re-runs `publish` alone, with the artifact and
 # the SHA-256 `verify` recorded (while the artifact is kept). If Maven
 # Central lists the version by then, `publish` reports it, downloads the
