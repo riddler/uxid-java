@@ -1,5 +1,10 @@
 package systems.riddler.uxid;
 
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
 /**
@@ -9,11 +14,15 @@ import java.util.Objects;
  * <p>Every option has a default, so {@code UxidOptions.builder().build()} asks for what {@link
  * Uxid#generate()} makes: no prefix, size {@link Size#XL}, a standard time read from the clock at
  * the call, lower case, the delimiter {@code _} and random bytes from {@link
- * ByteSource#secureRandom()}.
+ * ByteSource#secureRandom()}. Setting {@link Builder#from(String) from} asks for a deterministic id
+ * instead.
  *
  * <pre>{@code
  * UxidOptions options = UxidOptions.builder().prefix("usr").size(Size.S).build();
  * String id = Uxid.generate(options); // usr_ followed by a 14-character body
+ *
+ * UxidOptions named = UxidOptions.builder().prefix("usr").from("alice@example.com").build();
+ * String same = Uxid.generate(named); // usr_zcvt7epac0t1ebcsjfyf7cwz25, every time
  * }</pre>
  */
 public final class UxidOptions {
@@ -29,6 +38,7 @@ public final class UxidOptions {
   private final Long time;
   private final byte[] rand;
   private final ByteSource byteSource;
+  private final byte[] from;
 
   private UxidOptions(Builder builder) {
     this.prefix = builder.prefix;
@@ -40,6 +50,7 @@ public final class UxidOptions {
     this.time = builder.time;
     this.rand = builder.rand == null ? null : builder.rand.clone();
     this.byteSource = builder.byteSource;
+    this.from = builder.from;
   }
 
   /**
@@ -91,6 +102,16 @@ public final class UxidOptions {
     return byteSource;
   }
 
+  /** The deterministic input as UTF-8, or null for a time-based id. Never handed out. */
+  byte[] fromUtf8() {
+    return from;
+  }
+
+  /** Whether fixed random bytes are set, without copying them. */
+  boolean hasRand() {
+    return rand != null;
+  }
+
   /**
    * Builds a {@link UxidOptions}. Each setter refuses a value that is wrong on its own; a
    * combination of values that contradicts the wire format is refused by {@link
@@ -107,6 +128,7 @@ public final class UxidOptions {
     private Long time;
     private byte[] rand;
     private ByteSource byteSource = ByteSource.secureRandom();
+    private byte[] from;
 
     private Builder() {}
 
@@ -233,8 +255,8 @@ public final class UxidOptions {
 
     /**
      * Sets where random bytes come from; the default is {@link ByteSource#secureRandom()}. The
-     * source must be cryptographically secure. It is not called when fixed random bytes are set or
-     * the random width is 0.
+     * source must be cryptographically secure. It is not called when fixed random bytes are set,
+     * when the random width is 0, or for a deterministic id.
      *
      * @param byteSource the source
      * @return this builder
@@ -246,12 +268,58 @@ public final class UxidOptions {
     }
 
     /**
+     * Asks for a deterministic id: one derived from {@code from} and the prefix by SHA-256, so the
+     * same prefix, input and size always give the same id, in either letter case. The body is the
+     * marker ({@code z}, or {@code Z} in upper case) followed by hash characters, at the size's
+     * standard body length. The time, the time form, the random width and the byte source are not
+     * read. Fixed random bytes contradict it and are refused at generation with {@link
+     * ErrorCode#RAND_WITH_FROM}.
+     *
+     * <p>A deterministic id is as guessable as its input: never build one from a secret and treat
+     * the id as unguessable.
+     *
+     * <p>The input is hashed as its UTF-8 bytes. A string with no UTF-8 encoding, one holding an
+     * unpaired surrogate, is refused here rather than given a replacement character, which would
+     * give two different strings one id.
+     *
+     * @param from the input, any string with a UTF-8 encoding; the empty string is an input too
+     * @return this builder
+     * @throws IllegalArgumentException when {@code from} holds an unpaired surrogate
+     * @throws NullPointerException when {@code from} is null
+     */
+    public Builder from(String from) {
+      this.from = utf8(Objects.requireNonNull(from, "from"), "from");
+      return this;
+    }
+
+    /**
      * Returns the options this builder holds. The builder may be changed and built again.
      *
      * @return the options
      */
     public UxidOptions build() {
       return new UxidOptions(this);
+    }
+  }
+
+  /**
+   * Returns the UTF-8 bytes of {@code text}, refusing a string with no UTF-8 encoding (an unpaired
+   * surrogate) rather than replacing it.
+   */
+  static byte[] utf8(String text, String name) {
+    try {
+      ByteBuffer encoded =
+          StandardCharsets.UTF_8
+              .newEncoder()
+              .onMalformedInput(CodingErrorAction.REPORT)
+              .onUnmappableCharacter(CodingErrorAction.REPORT)
+              .encode(CharBuffer.wrap(text));
+      byte[] bytes = new byte[encoded.remaining()];
+      encoded.get(bytes);
+      return bytes;
+    } catch (CharacterCodingException e) {
+      throw new IllegalArgumentException(
+          name + " holds an unpaired surrogate and has no UTF-8 encoding", e);
     }
   }
 

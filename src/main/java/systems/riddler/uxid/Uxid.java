@@ -1,5 +1,8 @@
 package systems.riddler.uxid;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+
 /**
  * Generates UXIDs: prefixed, K-sortable identifiers a person can read, in the wire format of the
  * Elixir {@code uxid} package.
@@ -10,9 +13,15 @@ package systems.riddler.uxid;
  * later millisecond sorts after one made in an earlier millisecond, compared character by
  * character.
  *
+ * <p>A deterministic id, asked for with {@link UxidOptions.Builder#from(String)}, has instead a
+ * body of the marker {@code z} (or {@code Z}) and hash characters: the same prefix, input and size
+ * always give the same id, and it sorts after every time-based id of its prefix and case.
+ *
  * <pre>{@code
  * String id = Uxid.generate(); // a 26-character body, no prefix
  * String user = Uxid.generate(UxidOptions.builder().prefix("usr").size(Size.M).build());
+ * String named =
+ *     Uxid.generate(UxidOptions.builder().prefix("usr").from("alice@example.com").build());
  * }</pre>
  *
  * <p>Every method is static and safe to call from several threads at once; the class holds no
@@ -44,18 +53,39 @@ public final class Uxid {
    * field's width is the options' random width, or the width the size and time form give; its bytes
    * are the options' fixed bytes, or that many bytes from the options' byte source.
    *
+   * <p>When the options carry a {@link UxidOptions.Builder#from(String) from} input, the id is
+   * deterministic instead: the digest is SHA-256 over the prefix's UTF-8 bytes, a zero byte, the
+   * input's UTF-8 bytes, a zero byte and one byte holding the hash character count of the size (9,
+   * 13, 17, 21 or 25 for {@code xs} to {@code xl}), and the body is the marker followed by the
+   * first count x 5 bits of the digest, 5 bits per character. The clock, the time form, the random
+   * width and the byte source are not read.
+   *
    * @param options the request
    * @return the id
    * @throws UxidException with {@link ErrorCode#COMPACT_TIME_OUT_OF_RANGE} for a compact time whose
    *     first character would be the deterministic marker; {@link ErrorCode#RAND_SIZE_TOO_LARGE}
    *     for a random width above 10 bytes; {@link ErrorCode#RAND_WIDTH_MISMATCH} for fixed random
-   *     bytes whose count is not the random width
-   * @throws IllegalArgumentException when the clock reads outside 0 to 2^48 - 1 milliseconds
+   *     bytes whose count is not the random width; {@link ErrorCode#RAND_WITH_FROM} for fixed
+   *     random bytes with a deterministic input, whatever their count
+   * @throws IllegalArgumentException when the clock reads outside 0 to 2^48 - 1 milliseconds, or,
+   *     for a deterministic id, when the prefix holds an unpaired surrogate and has no UTF-8
+   *     encoding
    * @throws IllegalStateException when the byte source returns null or a count of bytes other than
    *     the one asked for
    * @throws NullPointerException when {@code options} is null
    */
   public static String generate(UxidOptions options) {
+    byte[] from = options.fromUtf8();
+    if (from != null) {
+      if (options.hasRand()) {
+        throw new UxidException(
+            ErrorCode.RAND_WITH_FROM,
+            "fixed random bytes and a deterministic input are mutually exclusive: a deterministic"
+                + " id has no random field");
+      }
+      return deterministic(options, from);
+    }
+
     Long fixedTime = options.time();
     long time = fixedTime == null ? UxidOptions.requireTime(System.currentTimeMillis()) : fixedTime;
     boolean compact = Boolean.TRUE.equals(options.compactTime());
@@ -97,6 +127,34 @@ public final class Uxid {
     }
     Base32.appendBytes(id, rand, options.letterCase());
     return id.toString();
+  }
+
+  private static String deterministic(UxidOptions options, byte[] from) {
+    int count = options.size().hashChars();
+    MessageDigest sha256 = sha256();
+    sha256.update(UxidOptions.utf8(options.prefix(), "the prefix"));
+    sha256.update((byte) 0);
+    sha256.update(from);
+    sha256.update((byte) 0);
+    sha256.update((byte) count);
+    byte[] digest = sha256.digest();
+
+    StringBuilder id = new StringBuilder(options.prefix().length() + 30);
+    if (!options.prefix().isEmpty()) {
+      id.append(options.prefix()).append(options.delimiter());
+    }
+    Base32.appendInteger(id, MARKER, 1, options.letterCase());
+    Base32.appendLeadingBits(id, digest, count, options.letterCase());
+    return id.toString();
+  }
+
+  /** A new SHA-256 digest; every Java platform is required to provide the algorithm. */
+  private static MessageDigest sha256() {
+    try {
+      return MessageDigest.getInstance("SHA-256");
+    } catch (NoSuchAlgorithmException e) {
+      throw new IllegalStateException("this Java platform provides no SHA-256", e);
+    }
   }
 
   private static byte[] draw(ByteSource source, int width) {
