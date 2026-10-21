@@ -102,8 +102,10 @@ name: Release
 # signs and uploads again. Re-running every job instead re-runs `verify`,
 # which refuses a version Maven Central lists, so that re-run stays red. A
 # failure the tagged commit itself causes (it is not on the default branch,
-# the tag and pom.xml name different versions, the gate is red) fails the
-# same way on every re-run.
+# the tag and pom.xml name different versions, the gate is red, or the
+# Portal fails the deployment's validation for something in the commit,
+# such as the POM's metadata or a file the build does not produce) fails
+# the same way on every re-run.
 #
 # Remedies. A version Maven Central lists is permanent: Maven Central never
 # deletes or replaces a published file, so a broken release is followed by
