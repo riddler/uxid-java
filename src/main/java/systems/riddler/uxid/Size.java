@@ -21,30 +21,41 @@ import java.util.Objects;
  *   <tr><td>{@code xl}</td><td>10</td><td>26</td><td>10</td><td>24</td></tr>
  * </table>
  *
+ * <p>A deterministic id ({@link UxidOptions.Builder#from(String)}) has no time or random field: its
+ * body is the marker and hash characters, at the standard length of its size, whatever the time
+ * form.
+ *
  * <p>The default size is {@link #XL}.
  */
 public enum Size {
   /** Extra small: no random bytes with a standard time, one with a compact time. */
-  XS("xs", "xsmall", 0, 1),
+  XS("xs", "xsmall", 0, 1, 9),
   /** Small: two random bytes with a standard time, three with a compact time. */
-  S("s", "small", 2, 3),
+  S("s", "small", 2, 3, 13),
   /** Medium: five random bytes with a standard time, six with a compact time. */
-  M("m", "medium", 5, 6),
+  M("m", "medium", 5, 6, 17),
   /** Large: seven random bytes with a standard time, eight with a compact time. */
-  L("l", "large", 7, 8),
+  L("l", "large", 7, 8, 21),
   /** Extra large, the default: ten random bytes with either time form. */
-  XL("xl", "xlarge", 10, 10);
+  XL("xl", "xlarge", 10, 10, 25);
 
   private final String wireName;
   private final String longName;
   private final int standardRandBytes;
   private final int compactRandBytes;
+  private final int hashChars;
 
-  Size(String wireName, String longName, int standardRandBytes, int compactRandBytes) {
+  Size(
+      String wireName,
+      String longName,
+      int standardRandBytes,
+      int compactRandBytes,
+      int hashChars) {
     this.wireName = wireName;
     this.longName = longName;
     this.standardRandBytes = standardRandBytes;
     this.compactRandBytes = compactRandBytes;
+    this.hashChars = hashChars;
   }
 
   /**
@@ -80,5 +91,13 @@ public enum Size {
   /** The random field's width in bytes for this size and time form. */
   int randBytes(boolean compact) {
     return compact ? compactRandBytes : standardRandBytes;
+  }
+
+  /**
+   * The hash characters of a deterministic body at this size, behind the marker: the standard body
+   * length less one.
+   */
+  int hashChars() {
+    return hashChars;
   }
 }

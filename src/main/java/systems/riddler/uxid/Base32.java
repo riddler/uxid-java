@@ -43,4 +43,24 @@ final class Base32 {
       out.append(alphabet.charAt(buffer));
     }
   }
+
+  /**
+   * Appends the first {@code chars x 5} bits of {@code bytes} as {@code chars} characters, with no
+   * short group; {@code bytes} holds at least that many bits.
+   */
+  static void appendLeadingBits(StringBuilder out, byte[] bytes, int chars, LetterCase letterCase) {
+    String alphabet = alphabet(letterCase);
+    int buffer = 0;
+    int bits = 0;
+    int next = 0;
+    for (int i = 0; i < chars; i++) {
+      if (bits < 5) {
+        buffer = (buffer << 8) | (bytes[next++] & 0xff);
+        bits += 8;
+      }
+      bits -= 5;
+      out.append(alphabet.charAt((buffer >>> bits) & 31));
+      buffer &= (1 << bits) - 1;
+    }
+  }
 }
