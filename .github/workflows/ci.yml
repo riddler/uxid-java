@@ -1,0 +1,144 @@
+name: CI
+
+# Two jobs. `gate` runs the full quality gate - the command an agent must
+# have green before committing - on the JDK and Maven mise.toml pins. `tests`
+# runs the test suite on the Temurin JDKs the library supports, 17, 21 and
+# 25: Java 17 is the floor pom.xml declares (maven.compiler.release), so a
+# change that works only on a newer Java is caught before it ships.
+#
+# In `tests` the code is still compiled by the JDK mise.toml pins, with
+# Error Prone, at the release level pom.xml declares; only the test run
+# moves to the matrix entry's JDK, through Surefire's `jvm` parameter, which
+# forks the test JVM from that JDK's `java`. The Error Prone release pom.xml
+# pins runs only on Java 21 or later, so the compiler cannot run on the
+# Java 17 entry, and compiling every entry on the one gate JDK means the
+# bytecode under test is the bytecode the gate checks. The format check and
+# the coverage check run in the verify phase, which only `gate` reaches.
+#
+# Every action is pinned to a full commit SHA, with its version in a
+# trailing comment.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Read-only: nothing here writes to the repository or authenticates to a
+# registry, and no secret is read.
+permissions:
+  contents: read
+
+# A newer push to the same branch or pull request supersedes the run in
+# progress.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: Full quality gate (mise.toml JDK)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      # The toolchain comes from mise.toml, provisioned by mise itself: the
+      # Temurin JDK and Maven at the versions pinned there. A version written
+      # into this file would drift the first time mise.toml moves. The action
+      # installs mise at the version below, runs `mise install` against
+      # mise.toml, and caches the tools.
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: 2026.8.2
+
+      # The gate is mise.toml's `gate` task: `java -version`, then `mvn -B
+      # -ntp verify` (the enforcer rules, the compile with every javac lint
+      # and Error Prone, the tests, the jars, the format check and the
+      # coverage check). The command is read out of .claude/wurk.json
+      # (gate.full) rather than written here, so the gate CI runs and the
+      # gate an agent must have green are one definition with one place to
+      # change it. It is read and executed inside the step rather than
+      # interpolated into `run:`, so a repository file never reaches the
+      # shell as expression text.
+      - name: Full quality gate
+        run: |
+          set -euo pipefail
+          mapfile -t cmd < <(jq -er '.gate.full[]' .claude/wurk.json)
+          test "${#cmd[@]}" -gt 0 || { echo "::error::gate.full is empty" >&2; exit 1; }
+          echo "gate command (.claude/wurk.json gate.full): ${cmd[*]}"
+          "${cmd[@]}"
+
+      # A gate that rewrites a tracked file or leaves an untracked file that
+      # is not ignored passes locally only because the change is then
+      # committed; here it is a failure, as it is before a release.
+      - name: Check the gate left the checkout clean
+        run: |
+          set -euo pipefail
+          if [ -n "$(git status --porcelain)" ]; then
+            git status --short
+            echo "::error::the gate left changed or untracked files" >&2
+            exit 1
+          fi
+
+  tests:
+    name: Tests on Temurin ${{ matrix.java }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ["17", "21", "25"]
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      # The JDK under test: the latest Temurin release of the matrix entry's
+      # line, the one a user on that line runs.
+      - name: Install Temurin ${{ matrix.java }}
+        id: java
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+
+      # The JDK that compiles, and Maven, from mise.toml, as in `gate`.
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: 2026.8.2
+
+      # `mvn test` compiles on the mise.toml JDK and forks the test JVM from
+      # the JDK installed above. Surefire records the forked JVM's system
+      # properties in each report, and the last command stops the job unless
+      # every report names the matrix entry's Java version, so a test run
+      # that fell back to the build JDK cannot pass here.
+      - name: Test on Temurin ${{ matrix.java }}
+        env:
+          TEST_JAVA_HOME: ${{ steps.java.outputs.path }}
+          JAVA_LINE: ${{ matrix.java }}
+        run: |
+          set -euo pipefail
+          test -x "${TEST_JAVA_HOME}/bin/java" || { echo "::error::no java under ${TEST_JAVA_HOME}" >&2; exit 1; }
+          echo "build JDK (mise.toml):"
+          mise exec -- java -version
+          echo "test JDK (Temurin ${JAVA_LINE}):"
+          "${TEST_JAVA_HOME}/bin/java" -version
+          mise exec -- mvn -B -ntp -Djvm="${TEST_JAVA_HOME}/bin/java" test
+          shopt -s nullglob
+          reports=(target/surefire-reports/TEST-*.xml)
+          test "${#reports[@]}" -gt 0 || { echo "::error::Surefire wrote no test report" >&2; exit 1; }
+          for report in "${reports[@]}"; do
+            if ! grep -q "name=\"java.specification.version\" value=\"${JAVA_LINE}\"" "$report"; then
+              grep -o 'name="java.specification.version" value="[^"]*"' "$report" || true
+              echo "::error::${report} was not run on Java ${JAVA_LINE}" >&2
+              exit 1
+            fi
+          done
+          echo "${#reports[@]} test report(s), each run on Java ${JAVA_LINE}"

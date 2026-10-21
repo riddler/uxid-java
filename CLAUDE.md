@@ -95,9 +95,10 @@ owns the release bead tags that merged commit with the new version (`vX.Y.Z`)
 and pushes the tag. An agent or a session never deploys to Maven Central: the
 release workflow (`.github/workflows/release.yml`, the file the release
 publishes from) publishes on that tag push, and a failed workflow is re-run
-from its Actions page, never worked round by a local publish. That workflow
-arrives with a later change; until it is on `main`, nothing publishes this
-package.
+from its Actions page, never worked round by a local publish. Its header
+says what each step checks, what a failure leaves behind and which re-run
+can go green; until the prerequisites in the next paragraph are in place,
+its signing or upload step fails and nothing is published.
 
 Maven Central's publisher, the Central Portal, offers no tokenless (OIDC)
 publishing and requires a GPG signature on every file it accepts, so this
@@ -157,10 +158,12 @@ is `systems.riddler:uxid`, and its module and package are
 The tree on `main` today holds these agent instructions, the wurk manifest
 (`.claude/wurk.json`), the tracker files under `.beads/`, the build
 (`pom.xml`, `mise.toml` and `.mvn/jvm.config`), the module descriptor, the
-package it exports (no public type yet), `LICENSE` and `CHANGELOG.md`. The
-library, CI, the release workflow and the vendored corpus arrive with later
-changes; until they do, the sentences in this file about the 1.0.0 package,
-its corpus and its workflows describe the target, not the current tree.
+package it exports (no public type yet), `LICENSE`, `CHANGELOG.md` with the
+fragment rule in `changelog.d/README.md`, and the two workflows: CI
+(`.github/workflows/ci.yml`) and the release workflow
+(`.github/workflows/release.yml`). The library and the vendored corpus
+arrive with later changes; until they do, the sentences in this file about
+the 1.0.0 package and its corpus describe the target, not the current tree.
 
 - **The package is `systems.riddler:uxid`.** Version 1.0.0 is its first
   release on Maven Central.
@@ -195,8 +198,11 @@ test`: the compile and the tests.
 
 The gate runs on the JDK `mise.toml` pins (Temurin 25, with Maven 3.9). The
 toolchain floor is declared separately: `maven.compiler.release` 17 in
-`pom.xml`, so the jars run on Java 17. CI, once it lands, proves the floor by
-running the tests on each supported JDK; the gate JDK alone does not.
+`pom.xml`, so the jars run on Java 17. CI (`.github/workflows/ci.yml`) runs
+the full gate on the `mise.toml` JDK and proves the floor by running the
+tests on Temurin 17, 21 and 25: the code is compiled on the gate JDK, with
+Error Prone, and only the test JVM moves to each JDK; the gate JDK alone does
+not prove the floor.
 
 ### This repo's own gate rules
 
@@ -256,7 +262,7 @@ satellite conventions rather than inventing a second set.
   test-only seam lives in the library source (`src/main/java/`).
 - **Java 17 or later** (`maven.compiler.release` 17), built with Maven, with
   Spotless (google-java-format), Error Prone, JUnit 5 and JaCoCo in the gate,
-  and the tests run on Java 17, 21 and 25 in CI once CI lands (ruled by the
+  and the tests run on Java 17, 21 and 25 in CI (ruled by the
   operator, 2026-10-21). The coverage bar is 90 percent of lines (decided by
   the conductor under a standing consent, 2026-10-21).
 - **One module.** The library's `module-info.java` declares the module
@@ -269,7 +275,8 @@ satellite conventions rather than inventing a second set.
   form the gate rules above give.
 - Changelog: a change a user of the API could notice adds a fragment under
   `changelog.d/`, named for the bead (`changelog.d/uxjv-abc.md`), in the same
-  request; tests, docs, tooling and gate changes take none. New version
+  request; tests, docs, tooling, CI and gate changes take none
+  (`changelog.d/README.md` states the rule and the format). New version
   sections in `CHANGELOG.md` keep the file's own heading shape; existing
   history is not rewritten.
 - Commit messages: simple present tense ("Adds ...", "Fixes ..."), body
