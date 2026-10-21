@@ -145,8 +145,8 @@ Also avoid `bd edit`, which opens `$EDITOR` and blocks. Use
 
 ## What this project is
 
-`uxid` for Java. Version 1.0.0, the package this repository is being built
-into, makes prefixed, K-sortable, Stripe-style identifiers a person can read,
+`uxid` for Java. Version 1.0.0, the package this repository holds, makes
+prefixed, K-sortable, Stripe-style identifiers a person can read,
 copy and route back to their resource, wire-compatible with the Elixir
 reference `uxid` and checked against its conformance corpus. It covers
 generation (random, deterministic and monotonic), decoding and the validity
@@ -166,9 +166,9 @@ release workflow (`.github/workflows/release.yml`). The package holds
 time-based and deterministic generation (`Uxid.generate` and `UxidOptions`),
 decoding (`Uxid.decode`, `DecodeOptions` and `DecodeResult`), the validity
 checks (`Uxid.isValid` and `Uxid.isDeterministic`) and the monotonic generator
-(`Monotonic`, with its `DrawSource`). The sentences in this file about the
-1.0.0 package describe the target, not the current tree: it is not yet
-published.
+(`Monotonic`, with its `DrawSource`). `pom.xml` states the version 1.0.0,
+and the release workflow publishes it to Maven Central when the tag `v1.0.0`
+is pushed.
 
 - **The package is `systems.riddler:uxid`.** Version 1.0.0 is its first
   release on Maven Central.
