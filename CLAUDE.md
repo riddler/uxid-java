@@ -158,12 +158,14 @@ is `systems.riddler:uxid`, and its module and package are
 The tree on `main` today holds these agent instructions, the wurk manifest
 (`.claude/wurk.json`), the tracker files under `.beads/`, the build
 (`pom.xml`, `mise.toml` and `.mvn/jvm.config`), the module descriptor, the
-package it exports (no public type yet), `LICENSE`, `CHANGELOG.md` with the
-fragment rule in `changelog.d/README.md`, and the two workflows: CI
+package it exports, `LICENSE`, `CHANGELOG.md` with the fragment rule in
+`changelog.d/README.md`, and the two workflows: CI
 (`.github/workflows/ci.yml`) and the release workflow
-(`.github/workflows/release.yml`). The library and the vendored corpus
-arrive with later changes; until they do, the sentences in this file about
-the 1.0.0 package and its corpus describe the target, not the current tree.
+(`.github/workflows/release.yml`). The package holds time-based generation
+(`Uxid.generate` and `UxidOptions`). Deterministic ids, decoding, the
+validity checks, the monotonic generator and the vendored corpus arrive
+with later changes; until they do, the sentences in this file about the
+1.0.0 package and its corpus describe the target, not the current tree.
 
 - **The package is `systems.riddler:uxid`.** Version 1.0.0 is its first
   release on Maven Central.
