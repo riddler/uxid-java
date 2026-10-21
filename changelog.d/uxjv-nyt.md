@@ -1,6 +1,0 @@
-### Added
-
-- `Uxid.decode(String)` and `Uxid.decode(String, DecodeOptions)` read an id back to a `DecodeResult`: a `DecodeResult.Decoded` with the prefix, the size, whether the time is compact, whether the body is deterministic and the time in milliseconds, or a `DecodeResult.Invalid` whose `InvalidReason` is `empty`, `invalid_length` or `invalid_character`, the first rule the body breaks in that order. Malformed input is answered, never thrown.
-- `DecodeOptions` takes the delimiter and a `java.time.Clock` that supplies a compact time's high bits; a compact time more than one day ahead of the clock is read from the 2^40 ms window before, which with a clock in the first window after the Unix epoch is a negative time.
-- The body lengths 10 and 18 always decode as standard time, so a compact `xs` or compact `m` id decodes to its size, not compact, with a time that is not the one it was generated at.
-- `Uxid.isValid(String)` and `Uxid.isValid(String, String delimiter, String requiredPrefix)` answer whether a string is a well-formed id and, given a prefix, carries exactly that prefix; `Uxid.isDeterministic(String)` and `Uxid.isDeterministic(String, String delimiter)` answer whether it is a well-formed deterministic id. Neither reads a clock.
